@@ -6,7 +6,7 @@ import (
 )
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "<h1>Hello OpenShift! Updated build</h1>")
+	fmt.Fprintln(w, "<h1>Hello OpenShift! The Dockerfile was deployed successfully</h1>")
 }
 
 func listenAndServe(port string) {
