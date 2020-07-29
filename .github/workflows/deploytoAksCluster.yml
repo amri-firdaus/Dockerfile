@@ -1,0 +1,63 @@
+on: [push]
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    
+    - uses: actions/checkout@master
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create ACR
+      id: create-acr
+      run: |
+        az acr create -n amricontainerregistry01 -g amricontainerregistry01b389-rg --location "Southeast Asia" --sku Standard --admin-enabled
+        echo "::set-output name=acr_username::`az acr credential show -n amricontainerregistry01 --query username | xargs`"
+        echo "::set-output name=acr_password::`az acr credential show -n amricontainerregistry01 --query passwords[0].value | xargs`"
+        echo "::add-mask::`az acr credential show -n amricontainerregistry01 --query passwords[0].value | xargs`"
+
+    - uses: azure/docker-login@v1
+      with:
+        login-server: amricontainerregistry01.azurecr.io
+        username: ${{ steps.create-acr.outputs.acr_username }}
+        password: ${{ steps.create-acr.outputs.acr_password }}
+
+    - name: Build and push image to ACR
+      id: build-image
+      run: |
+        docker build "$GITHUB_WORKSPACE/" -f  "Dockerfile" -t amricontainerregistry01.azurecr.io/akslab01:${{ github.sha }}
+        docker push amricontainerregistry01.azurecr.io/akslab01:${{ github.sha }}
+    
+    - uses: azure/k8s-set-context@v1
+      id: login
+      with:
+         kubeconfig: ${{ secrets.aks_akslab01_kubeConfig }}
+    
+    - name: Create namespace
+      run: |
+        namespacePresent=`kubectl get namespace | grep akslab01b43a | wc -l`
+        if [ $namespacePresent -eq 0 ]
+        then
+            echo `kubectl create namespace akslab01b43a`
+        fi
+
+    - uses: azure/k8s-create-secret@v1
+      with:
+        namespace: akslab01b43a
+        container-registry-url: amricontainerregistry01.azurecr.io
+        container-registry-username: ${{ steps.create-acr.outputs.acr_username }}
+        container-registry-password: ${{ steps.create-acr.outputs.acr_password }}
+        secret-name: akslab01dockerauth
+       
+    - uses: azure/k8s-deploy@v1
+      with:
+        namespace: akslab01b43a
+        manifests: |
+          manifests/deployment.yml
+          manifests/service.yml
+        images: |
+          amricontainerregistry01.azurecr.io/akslab01:${{ github.sha }}
+        imagepullsecrets: |
+          akslab01dockerauth
