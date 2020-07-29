@@ -1,0 +1,16 @@
+apiVersion : apps/v1beta1
+kind: Deployment
+metadata:
+  name: "akslab01-03ac"
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: "akslab01-03ac"
+    spec:
+      containers:
+        - name: "akslab01-03ac"
+          image: "amricontainerregistry01.azurecr.io/akslab01"
+          ports:
+          - containerPort: 8080
