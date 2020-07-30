@@ -1,0 +1,16 @@
+apiVersion : apps/v1beta1
+kind: Deployment
+metadata:
+  name: "akscluster1-96a9"
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: "akscluster1-96a9"
+    spec:
+      containers:
+        - name: "akscluster1-96a9"
+          image: "acr02labamri.azurecr.io/akscluster1"
+          ports:
+          - containerPort: 8080
