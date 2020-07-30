@@ -1,0 +1,63 @@
+on: [push]
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    
+    - uses: actions/checkout@master
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create ACR
+      id: create-acr
+      run: |
+        az acr create -n ACR02labamri -g ACR02labamri9198-rg --location "Southeast Asia" --sku Basic --admin-enabled
+        echo "::set-output name=acr_username::`az acr credential show -n ACR02labamri --query username | xargs`"
+        echo "::set-output name=acr_password::`az acr credential show -n ACR02labamri --query passwords[0].value | xargs`"
+        echo "::add-mask::`az acr credential show -n ACR02labamri --query passwords[0].value | xargs`"
+
+    - uses: azure/docker-login@v1
+      with:
+        login-server: acr02labamri.azurecr.io
+        username: ${{ steps.create-acr.outputs.acr_username }}
+        password: ${{ steps.create-acr.outputs.acr_password }}
+
+    - name: Build and push image to ACR
+      id: build-image
+      run: |
+        docker build "$GITHUB_WORKSPACE/" -f  "Dockerfile" -t acr02labamri.azurecr.io/akscluster1:${{ github.sha }}
+        docker push acr02labamri.azurecr.io/akscluster1:${{ github.sha }}
+    
+    - uses: azure/k8s-set-context@v1
+      id: login
+      with:
+         kubeconfig: ${{ secrets.aks_akscluster1_kubeConfig }}
+    
+    - name: Create namespace
+      run: |
+        namespacePresent=`kubectl get namespace | grep akscluster1c640 | wc -l`
+        if [ $namespacePresent -eq 0 ]
+        then
+            echo `kubectl create namespace akscluster1c640`
+        fi
+
+    - uses: azure/k8s-create-secret@v1
+      with:
+        namespace: akscluster1c640
+        container-registry-url: acr02labamri.azurecr.io
+        container-registry-username: ${{ steps.create-acr.outputs.acr_username }}
+        container-registry-password: ${{ steps.create-acr.outputs.acr_password }}
+        secret-name: akscluster1dockerauth
+       
+    - uses: azure/k8s-deploy@v1
+      with:
+        namespace: akscluster1c640
+        manifests: |
+          manifests/deployment-1.yml
+          manifests/service-1.yml
+        images: |
+          acr02labamri.azurecr.io/akscluster1:${{ github.sha }}
+        imagepullsecrets: |
+          akscluster1dockerauth
